@@ -1,0 +1,99 @@
+import cv2
+import math
+from ultralytics import YOLO 
+from ultralytics.utils.plotting import Annotator, colors
+import pyttsx3
+
+# Load the YOLOv8 model with classification capabilities
+model = YOLO("best_2.pt")
+
+# Initialize the text-to-speech engine
+engine = pyttsx3.init()     
+
+# Specify the IP address and port of the camera stream
+camera_url = 0
+cap = cv2.VideoCapture(camera_url)
+
+# Check if the camera stream is opened successfully
+if not cap.isOpened():
+    print("Error: Unable to open the camera stream.")
+    exit()
+
+# Set the video writer parameters if you want to save the output
+w, h, fps = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FPS)))
+out = cv2.VideoWriter('output.avi', cv2.VideoWriter_fourcc(*'MJPG'), fps, (w, h))
+
+center_point = (w // 2, h)  # Center point of the frame
+known_width = 0.5  # Known width of the object in meters (you need to set this)
+focal_length = 700 # Focal length in pixels (you need to calibrate this)
+
+txt_color, txt_background, bbox_clr = ((0, 0, 0), (255, 255, 255), (255, 0, 255))
+
+text_font_scale = 0.5  # Adjust this value to change the text size
+text_thickness = 2  # Adjust this value to change the text thickness
+
+def give_voice_feedback(message):
+    engine.say(message)
+    engine.runAndWait()
+
+while True:
+    # Read the frame from the camera stream
+    ret, im0 = cap.read()
+
+    if not ret:
+        print("Error capturing frame from the camera stream.")
+        break
+
+    annotator = Annotator(im0, line_width=2)
+    results = model(im0)
+
+    for result in results:
+        boxes = result.boxes.xyxy.cpu()
+
+        for i, box in enumerate(boxes):
+            cls = int(result.boxes.cls[i])
+            label = model.names[cls]
+            annotator.box_label(box, label, color=colors(cls, True))
+            annotator.visioneye(box, center_point)
+        
+            x1, y1 = int((box[0] + box[2]) // 2), int((box[1] + box[3]) // 2)  # Bounding box centroid
+            box_width = box[2] - box[0]
+            distance = (known_width * focal_length) / box_width
+
+            text = f"{distance:.2f} m"
+            text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, text_font_scale, text_thickness)
+
+            # Adjust the text position based on the bounding box location
+            text_x = max(10, x1 - text_size[0] // 2)
+            text_x = min(text_x, im0.shape[1] - text_size[0] - 10)
+            text_y = max(y1 - text_size[1] - 10, 10)
+
+            cv2.rectangle(im0, (text_x - 5, text_y - 5), (text_x + text_size[0] + 5, text_y + text_size[1] + 5), txt_background, -1)
+            cv2.putText(im0, text, (text_x, text_y + text_size[1]), cv2.FONT_HERSHEY_SIMPLEX, text_font_scale, txt_color, text_thickness)
+
+            # Check for pothole detection and provide voice guidance
+            if label == "Person detection - v16 2023-05-27 6:46pm":
+                if x1 < w // 3:  # Pothole on the left
+                    print("Pothole on the left,move right or walk straight{distance} ")
+                    give_voice_feedback("Pothole on the left, move right or walk straight")
+                elif x1 > 2 * (w // 3):  # Pothole on the right
+                    print("Pothole on the right,move left or walk straight")
+                    give_voice_feedback("Pothole on the right, move left or walk straight")
+                else:  # Pothole in the center
+                    print("Pothile straight shead,move left or right")
+                    give_voice_feedback("Pothole straight ahead, move left or right")
+
+    # Write the frame to the video writer (if enabled)
+    out.write(im0)
+
+    # Display the frame
+    cv2.imshow("visioneye-distance-calculation", im0)
+
+    # Press 'q' to exit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release resources
+out.release()
+cap.release()
+cv2.destroyAllWindows()
