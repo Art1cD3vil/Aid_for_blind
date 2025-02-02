@@ -1,0 +1,5 @@
+opencv-python-headless==4.5.5.62
+pyttsx3==2.90
+torch==1.10.0
+ultralytics
+numpy==1.21.2

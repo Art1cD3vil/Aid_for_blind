@@ -1,29 +1,27 @@
 import cv2
 import math
-from ultralytics import YOLO
+from ultralytics import YOLO 
 from ultralytics.utils.plotting import Annotator, colors
 
 # Load the YOLOv8 model with classification capabilities
-# This model is responsible for object detection and classification.
-model = YOLO("yolov8n.pt")
+model = YOLO("25_best.pt")
 
 # Specify the IP address and port of the camera stream
-# This URL should be replaced with your mobile camera's IP address and port.
-camera_url = "http:/Your_IP_address:Your_Port/video" 
+camera_url =0
 cap = cv2.VideoCapture(camera_url)
 
-# Check if the camera stream is opened successfully
+# Check if the camera stream is opened successfully``
 if not cap.isOpened():
     print("Error: Unable to open the camera stream.")
     exit()
 
 # Set the video writer parameters if you want to save the output
-# These parameters are for recording the video stream with detections.
 w, h, fps = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FPS)))
 out = cv2.VideoWriter('output.avi', cv2.VideoWriter_fourcc(*'MJPG'), fps, (w, h))
 
 center_point = (w // 2, h)  # Center point of the frame
-pixel_per_meter = 234 
+known_width = 0.5  # Known width of the object in meters (you need to set this)
+focal_length = 700  # Focal length in pixels (you need to calibrate this)
 
 txt_color, txt_background, bbox_clr = ((0, 0, 0), (255, 255, 255), (255, 0, 255))
 
@@ -51,7 +49,8 @@ while True:
             annotator.visioneye(box, center_point)
 
             x1, y1 = int((box[0] + box[2]) // 2), int((box[1] + box[3]) // 2)  # Bounding box centroid
-            distance = (math.sqrt((x1 - center_point[0]) ** 2 + (y1 - center_point[1]) ** 2)) / pixel_per_meter
+            box_width = box[2] - box[0]
+            distance = (known_width * focal_length) / box_width
 
             text = f"{distance:.2f} m"
             text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, text_font_scale, text_thickness)
@@ -63,7 +62,7 @@ while True:
 
             cv2.rectangle(im0, (text_x - 5, text_y - 5), (text_x + text_size[0] + 5, text_y + text_size[1] + 5), txt_background, -1)
             cv2.putText(im0, text, (text_x, text_y + text_size[1]), cv2.FONT_HERSHEY_SIMPLEX, text_font_scale, txt_color, text_thickness)
-            
+                
     # Write the frame to the video writer (if enabled)
     out.write(im0)
 
